@@ -737,3 +737,84 @@ class LatentDiffusion(DDPM):
             else:
                 return {key: log[key] for key in return_keys}
         return log
+
+
+class DiffusionWrapper(pl.LightningModule):
+    def __init__(self, diff_model_config, conditioning_key):
+        super().__init__()
+        self.diffusion_model = instantiate_from_config(diff_model_config)
+        self.conditioning_key = conditioning_key
+
+    def forward(
+        self,
+        x,
+        t,
+        c_concat: list = None,
+        c_crossattn: list = None,
+        c_adm=None,
+        s=None,
+        mask=None,
+        **kwargs,
+    ):
+        # temporal_context = fps is foNone
+        if self.conditioning_key is None:
+            out = self.diffusion_model(x, t)
+        elif self.conditioning_key == "concat":
+            xc = torch.cat([x] + c_concat, dim=1)
+            out = self.diffusion_model(xc, t, **kwargs)
+        elif self.conditioning_key == "crossattn":
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_model(x, t, context=cc, **kwargs)
+        elif self.conditioning_key == "hybrid":
+            ## it is just right [b,c,t,h,w]: concatenate in channel dim
+            xc = torch.cat([x] + c_concat, dim=1)
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_model(xc, t, context=cc)
+        elif self.conditioning_key == "resblockcond":
+            cc = c_crossattn[0]
+            out = self.diffusion_model(x, t, context=cc)
+        elif self.conditioning_key == "adm":
+            cc = c_crossattn[0]
+            out = self.diffusion_model(x, t, y=cc)
+        elif self.conditioning_key == "hybrid-adm":
+            assert c_adm is not None
+            xc = torch.cat([x] + c_concat, dim=1)
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_model(xc, t, context=cc, y=c_adm)
+        elif self.conditioning_key == "hybrid-time":
+            assert s is not None
+            xc = torch.cat([x] + c_concat, dim=1)
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_model(xc, t, context=cc, s=s)
+        elif self.conditioning_key == "concat-time-mask":
+            # assert s is not None
+            # mainlogger.info('x & mask:',x.shape,c_concat[0].shape)
+            xc = torch.cat([x] + c_concat, dim=1)
+            out = self.diffusion_model(xc, t, context=None, s=s, mask=mask)
+        elif self.conditioning_key == "concat-adm-mask":
+            # assert s is not None
+            # mainlogger.info('x & mask:',x.shape,c_concat[0].shape)
+            if c_concat is not None:
+                xc = torch.cat([x] + c_concat, dim=1)
+            else:
+                xc = x
+            out = self.diffusion_model(xc, t, context=None, y=s, mask=mask)
+        elif self.conditioning_key == "hybrid-adm-mask":
+            cc = torch.cat(c_crossattn, 1)
+            if c_concat is not None:
+                xc = torch.cat([x] + c_concat, dim=1)
+            else:
+                xc = x
+            out = self.diffusion_model(xc, t, context=cc, y=s, mask=mask)
+        elif (
+            self.conditioning_key == "hybrid-time-adm"
+        ):  # adm means y, e.g., class index
+            # assert s is not None
+            assert c_adm is not None
+            xc = torch.cat([x] + c_concat, dim=1)
+            cc = torch.cat(c_crossattn, 1)
+            out = self.diffusion_model(xc, t, context=cc, s=s, y=c_adm)
+        else:
+            raise NotImplementedError()
+
+        return out
