@@ -2,16 +2,24 @@ import math
 from inspect import isfunction
 import torch
 from torch import nn
-
-# Remove distributed processing
+import torch.distributed as dist
 
 
 def gather_data(data, return_np=True):
-    """gather data from a single process"""
-    return [data]  # Simplified for CPU-only execution
+    """gather data from multiple processes to one list"""
+    data_list = [torch.zeros_like(data) for _ in range(dist.get_world_size())]
+    dist.all_gather(data_list, data)  # gather not supported with NCCL
+    if return_np:
+        data_list = [data.cpu().numpy() for data in data_list]
+    return data_list
 
 
-# Remove autocast function as it is GPU-specific
+def autocast(f):
+    def do_autocast(*args, **kwargs):
+        # Removed GPU-specific settings for CPU usage
+        return f(*args, **kwargs)
+
+    return do_autocast
 
 
 def extract_into_tensor(a, t, x_shape):
@@ -20,8 +28,12 @@ def extract_into_tensor(a, t, x_shape):
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
 
-def noise_like(shape):
-    return torch.randn(shape)  # Simplified for CPU-only execution
+def noise_like(shape, device, repeat=False):
+    repeat_noise = lambda: torch.randn((1, *shape[1:]), device=device).repeat(
+        shape[0], *((1,) * (len(shape) - 1))
+    )
+    noise = lambda: torch.randn(shape, device=device)
+    return repeat_noise() if repeat else noise()
 
 
 def default(val, d):
