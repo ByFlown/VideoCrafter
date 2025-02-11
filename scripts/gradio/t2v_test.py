@@ -58,7 +58,15 @@ class Text2Video:
         if steps > 60:
             steps = 60
         model = self.model_list[gpu_id]
-        model = model.cuda()
+        if torch.cuda.is_available():
+            model = model.cuda()
+        else:
+            model = model.cpu()  # Ensure model is on CPU if CUDA is not available
+        if torch.cuda.is_available():
+            model = model.cuda()
+        else:
+            model = model.cpu()  # Ensure model is on CPU if CUDA is not available
+
         batch_size = 1
         channels = model.model.diffusion_model.in_channels
         frames = model.temporal_length
