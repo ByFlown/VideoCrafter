@@ -385,7 +385,12 @@ class DDPM(pl.LightningModule):
 
         if not log_every_t:
             log_every_t = self.log_every_t
-        device = "cpu"  # Ensure all operations are on CPU
+        device = (
+            self.model.betas.device
+            if self.model.betas.device.type == "cuda"
+            else torch.device("cuda")
+        )  # Ensure operations are on the correct device
+
         b = shape[0]
         # sample an initial noise
         if x_T is None:
@@ -664,7 +669,9 @@ class LatentDiffusion(DDPM):
             )
             cond = {key: cond}
 
-        x_recon = self.model(x_noisy, t, **cond, **kwargs)
+        x_recon = self.model(
+            x_noisy.to(device), t, **cond, **kwargs
+        )  # Move x_noisy to the correct device
 
         if isinstance(x_recon, tuple):
             return x_recon[0]

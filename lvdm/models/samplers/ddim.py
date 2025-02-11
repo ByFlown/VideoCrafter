@@ -200,7 +200,8 @@ class DDIMSampler(object):
         start_timesteps=None,
         **kwargs,
     ):
-        device = self.model.betas.device
+        device = torch.device("cpu")
+
         print("ddim device", device)
         b = shape[0]
         if x_T is None:
@@ -487,8 +488,6 @@ class DDIMSampler(object):
                 cond,
                 ts,
                 index=index,
-                use_original_steps=use_original_steps,
-                unconditional_guidance_scale=unconditional_guidance_scale,
                 unconditional_conditioning=unconditional_conditioning,
             )
         return x_dec
